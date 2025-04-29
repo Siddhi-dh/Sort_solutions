@@ -1,69 +1,24 @@
-# run with streamlit run app.py 
-import streamlit as st
-import google.generativeai as genai
-import os
-import json
+from flask import Flask, request, jsonify
 
-# Configure Gemini
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-model = genai.GenerativeModel(model_name="gemini-2.0-flash-lite")
+app = Flask(__name__)
 
-# Streamlit UI
-st.set_page_config(page_title="Auto Task Prioritizer", layout="centered")
-st.title("📋 Auto Task Prioritizer")
-st.write("Enter your list of tasks, and let AI sort them by priority!")
+# In-memory storage for tasks
+tasks = {}
 
-# Text input
-task_input = st.text_area("Enter tasks (one per line):", height=200)
-if st.button("Auto-Prioritize"):
-    if not task_input.strip():
-        st.warning("Please enter some tasks.")
-    else:
-        # Prepare tasks
-        tasks = [line.strip() for line in task_input.strip().split("\n") if line.strip()]
-        formatted_tasks = "\n".join([f"- {task}" for task in tasks])
+@app.route('/tasks/<task_id>/set-time', methods=['POST'])
+def set_task_time(task_id):
+    data = request.get_json()
 
-        prompt = f"""
-        Given the following tasks:
-        {formatted_tasks}
+    # Validate input fields
+    if 'start_time' not in data or 'end_time' not in data:
+        return jsonify({"error": "Missing start_time or end_time"}), 400
 
-        Classify each task into one of the following priority levels:
-        High = High priority 
-        Medium = Medium priority
-        Low = Low priority
+    tasks[task_id] = {
+        "start_time": data['start_time'],
+        "end_time": data['end_time']
+    }
 
-        Return the result in JSON format like:
-        {{
-            "High": ["task1", "task2"],
-            "Medium": ["task3"],
-            "Low": ["task4"]
-        }}
-        """
+    return jsonify({"message": "Start and end times recorded for the task."}), 200
 
-        try:
-            with st.spinner("Thinking..."):
-                response = model.generate_content(prompt)
-                output = response.text.strip()
-
-                  # Try to extract JSON safely from the response
-                start = output.find('{')
-                end = output.rfind('}') + 1
-                json_text = output[start:end]
-
-                priorities = json.loads(json_text)
-
-                # Display results
-                st.success("Tasks Prioritized!")
-                priority_map = {
-                              "High": "🔥 High Priority Tasks",
-                              "Medium": "⏳ Medium Priority Tasks",
-                              "Low": "💤 Low Priority Tasks"
-                }
-                for level in ["High", "Medium", "Low"]:
-                    st.subheader(priority_map[level])
-                    for t in priorities.get(level, []):
-                        st.markdown(f"- ✅ {t}")
-
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
-
+if __name__ == '__main__':
+    app.run(debug=True)
